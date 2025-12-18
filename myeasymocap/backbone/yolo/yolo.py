@@ -23,12 +23,30 @@ def check_modelpath(paths):
 
 class BaseYOLOv5:
     def __init__(self, ckpt=None, model='yolov5m', name='object2d', multiview=True) -> None:
+    # def __init__(self, ckpt='/home/bupt630/Dabai/AmmWave/EasyMocap/yolov5m.pt', model='yolov5m', name='object2d', multiview=True) -> None:
+        # 使用本地缓存的 yolov5 仓库，避免每次都连接 GitHub
+        local_repo = os.path.expanduser('~/.cache/torch/hub/ultralytics_yolov5_master')
+        
         if ckpt is not None:
             ckpt = check_modelpath(ckpt)
-            self.model = torch.hub.load('ultralytics/yolov5', 'custom', ckpt)
+            if os.path.exists(local_repo):
+                self.model = torch.hub.load(local_repo, 'custom', ckpt, source='local', force_reload=False, skip_validation=True)
+            else:
+                self.model = torch.hub.load('ultralytics/yolov5', 'custom', ckpt, force_reload=False, skip_validation=True)
         else:
             print('[{}] Not given ckpt, use default yolov5'.format(self.__class__.__name__))
-            self.model = torch.hub.load('ultralytics/yolov5', model)
+            # 优先使用本地缓存的仓库，避免联网
+            if os.path.exists(local_repo):
+                print(f'[{self.__class__.__name__}] Loading from local repo: {local_repo}')
+                self.model = torch.hub.load(local_repo, model, source='local', force_reload=False, skip_validation=True)
+            else:
+                print(f'[{self.__class__.__name__}] Local repo not found, downloading from GitHub')
+                try:
+                    self.model = torch.hub.load('ultralytics/yolov5', model, force_reload=False, skip_validation=True)
+                except Exception as e:
+                    print(f"[{self.__class__.__name__}] Failed to load model from local cache, try downloading. Error: {e}")
+                    # retry with force_reload
+                    self.model = torch.hub.load('ultralytics/yolov5', model, force_reload=True, skip_validation=True)
         self.multiview = multiview
         self.name = name
     
@@ -197,7 +215,13 @@ class DetectToPelvis:
 class Yolo_model:
     def __init__(self, mode, yolo_ckpt, multiview, repo_or_dir = 'ultralytics/yolov5', source='github') -> None:
         yolo_ckpt = check_modelpath(yolo_ckpt)
-        self.model = torch.hub.load(repo_or_dir, 'custom', yolo_ckpt, source=source)
+        # 优先使用本地缓存的仓库
+        local_repo = os.path.expanduser('~/.cache/torch/hub/ultralytics_yolov5_master')
+        if repo_or_dir == 'ultralytics/yolov5' and os.path.exists(local_repo):
+            print(f'[{self.__class__.__name__}] Loading from local repo: {local_repo}')
+            self.model = torch.hub.load(local_repo, 'custom', yolo_ckpt, source='local')
+        else:
+            self.model = torch.hub.load(repo_or_dir, 'custom', yolo_ckpt, source=source)
         self.min_detect_thres = 0.3
         self.mode = mode # 'fullimg' # 'bboxcrop'
         self.output = 'output'
